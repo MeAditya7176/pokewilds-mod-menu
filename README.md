@@ -6,6 +6,14 @@ Works directly with your existing saves — **no manual file editing or extracti
 
 ---
 
+## 🛡️ Security & Safety Verified
+
+- **VirusTotal Clean Scan (66/69 Clean):** [View Official VirusTotal Report](https://www.virustotal.com/gui/file/4422863fa8caad9c8f30cfed9eaf4eb835c4a6e67ff27a4b8bcc47da440834b3)
+- **100% Open Source:** Every line of code is completely transparent and inspectable in `PokeWildsModMenu.cs`.
+- **Windows SmartScreen Note:** Since this is a free community tool without a paid Microsoft certificate ($400/yr), Windows SmartScreen may show a warning on first launch. Simply click **"More info" ➔ "Run anyway"**.
+
+---
+
 ## 🌟 Key Features
 
 ### 🎒 1. Items & Inventory Spawner

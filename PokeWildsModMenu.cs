@@ -3,9 +3,23 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
 using System.IO.Compression;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
+
+[assembly: AssemblyTitle("PokéWilds Mod Menu & Spawner")]
+[assembly: AssemblyDescription("In-Game Mod Menu, Pokémon Spawner and Cheat Engine for PokéWilds")]
+[assembly: AssemblyConfiguration("")]
+[assembly: AssemblyCompany("PokéWilds Community")]
+[assembly: AssemblyProduct("PokéWilds Mod Menu")]
+[assembly: AssemblyCopyright("Copyright © 2026 PokéWilds Community")]
+[assembly: AssemblyTrademark("")]
+[assembly: AssemblyCulture("")]
+[assembly: ComVisible(false)]
+[assembly: Guid("e2b5c7a1-8f34-4d92-b106-7e5c9a124d3f")]
+[assembly: AssemblyVersion("1.5.0.0")]
+[assembly: AssemblyFileVersion("1.5.0.0")]
 
 namespace PokeWildsModMenu
 {
