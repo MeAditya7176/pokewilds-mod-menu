@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.IO;
@@ -35,30 +36,27 @@ namespace PokeWildsModMenu
             }
             catch (Exception ex)
             {
-                File.WriteAllText(@"modmenu_error.log", ex.ToString());
-                MessageBox.Show(ex.Message, "PokéWilds Mod Menu Error");
+                File.WriteAllText("modmenu_error.log", ex.ToString());
+                MessageBox.Show(ex.Message, "PokeWilds Mod Menu Error");
             }
         }
     }
 
     public class ModMenuForm : Form
     {
-        private string gameDir = @"F:\pokewilds-v0.8.11-windows-64";
+        private string gameDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
         private string activeSavFolder = "";
         private string activeZipPath = "";
         private Dictionary<string, object> saveData = null;
-        private JavaScriptSerializer jsonSer = new JavaScriptSerializer();
+        private JavaScriptSerializer jsonSer = new JavaScriptSerializer { MaxJsonLength = int.MaxValue };
 
-        // Top Controls
+        // Top UI Controls
         private ComboBox cmbSaves;
         private Label lblPlayerInfo;
         private Label lblStatus;
         private TabControl tabControl;
-
-        // Custom Top Nav Buttons
         private Button btnNavItems;
         private Button btnNavPokemon;
-        private Button btnNavCheats;
         private Button btnNavWorld;
 
         // Items Tab
@@ -73,10 +71,6 @@ namespace PokeWildsModMenu
         private NumericUpDown numPokeHp;
         private CheckBox chkPokeShiny;
         private NumericUpDown numPokeFriend;
-        private TextBox txtMove1;
-        private TextBox txtMove2;
-        private TextBox txtMove3;
-        private TextBox txtMove4;
 
         // Pokemon Spawner Controls
         private ComboBox cmbSpawnPoke;
@@ -84,10 +78,6 @@ namespace PokeWildsModMenu
         private CheckBox chkSpawnShiny;
         private ComboBox cmbSpawnGender;
         private TextBox txtSpawnNick;
-
-        // Cheat Console Tab
-        private TextBox txtCheatCode;
-        private ListBox listCheatLog;
 
         // World Tab
         private RadioButton radDay;
@@ -106,25 +96,55 @@ namespace PokeWildsModMenu
         };
 
         private List<string> allPokemonNames = new List<string>();
+        private Dictionary<string, List<KeyValuePair<int, string>>> learnsets = new Dictionary<string, List<KeyValuePair<int, string>>>(StringComparer.OrdinalIgnoreCase);
 
         public ModMenuForm()
         {
             this.Text = "PokéWilds Mod Menu & Spawner v1.5";
-            this.Size = new Size(910, 715);
-            this.MinimumSize = new Size(910, 715);
+            this.Size = new Size(910, 680);
+            this.MinimumSize = new Size(910, 680);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(24, 26, 32);
             this.ForeColor = Color.FromArgb(240, 240, 245);
             this.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
 
-            // Auto-detect game directory
-            string appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
-            if (Directory.Exists(Path.Combine(appDir, "app")) || File.Exists(Path.Combine(appDir, "pokewilds.exe")))
+            // Robust game directory auto-detection
+            try
             {
-                gameDir = appDir;
+                string exePath = Assembly.GetExecutingAssembly().Location;
+                string exeDir = !string.IsNullOrEmpty(exePath) ? Path.GetDirectoryName(exePath) : "";
+                string appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
+
+                if (!string.IsNullOrEmpty(exeDir) && (Directory.Exists(Path.Combine(exeDir, "app")) || File.Exists(Path.Combine(exeDir, "pokewilds.exe")) || Directory.GetDirectories(exeDir, "*.sav").Length > 0))
+                {
+                    gameDir = exeDir;
+                }
+                else if (Directory.Exists(Path.Combine(appDir, "app")) || File.Exists(Path.Combine(appDir, "pokewilds.exe")) || Directory.GetDirectories(appDir, "*.sav").Length > 0)
+                {
+                    gameDir = appDir;
+                }
             }
+            catch { }
 
             LoadPokemonNames();
+            LoadLearnsets();
+
+            // Set Form Icon
+            try
+            {
+                string icoFile = Path.Combine(gameDir, "app_logo.ico");
+                if (!File.Exists(icoFile)) icoFile = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "app_logo.ico");
+                if (File.Exists(icoFile))
+                {
+                    this.Icon = new Icon(icoFile);
+                }
+                else
+                {
+                    this.Icon = Icon.ExtractAssociatedIcon(Assembly.GetExecutingAssembly().Location);
+                }
+            }
+            catch { }
+
             InitUI();
             ScanSaves();
         }
@@ -145,38 +165,126 @@ namespace PokeWildsModMenu
                     }
                 }
             }
+
             if (allPokemonNames.Count == 0)
             {
-                allPokemonNames.AddRange(new string[] { "charizard", "mewtwo", "pikachu", "lucario", "gengar", "rayquaza", "tyranitar", "dragonite", "blastoise", "machop" });
+                allPokemonNames.AddRange(new string[] {
+                    "bulbasaur", "ivysaur", "venusaur", "charmander", "charmeleon", "charizard",
+                    "squirtle", "wartortle", "blastoise", "pikachu", "raichu", "mewtwo", "mew",
+                    "machop", "machoke", "machamp", "gengar", "rayquaza", "lucario", "eevee"
+                });
             }
         }
 
-        private void SwitchTab(int index)
+        private void LoadLearnsets()
         {
-            tabControl.SelectedIndex = index;
-            Color activeColor = Color.FromArgb(99, 102, 241);
-            Color idleColor = Color.FromArgb(45, 49, 60);
+            string lFile = Path.Combine(gameDir, "pokemon_learnsets.txt");
+            if (!File.Exists(lFile)) lFile = @"C:\Users\Admin\.gemini\antigravity-ide\scratch\learnsets.txt";
+            if (File.Exists(lFile))
+            {
+                try
+                {
+                    string[] lines = File.ReadAllLines(lFile);
+                    foreach (string line in lines)
+                    {
+                        if (string.IsNullOrEmpty(line) || !line.Contains("=")) continue;
+                        string[] parts = line.Split('=');
+                        string mon = parts[0].Trim().ToLower();
+                        string[] mvList = parts[1].Split(';');
 
-            btnNavItems.BackColor = (index == 0) ? activeColor : idleColor;
-            btnNavPokemon.BackColor = (index == 1) ? activeColor : idleColor;
-            btnNavCheats.BackColor = (index == 2) ? activeColor : idleColor;
-            btnNavWorld.BackColor = (index == 3) ? activeColor : idleColor;
+                        List<KeyValuePair<int, string>> moves = new List<KeyValuePair<int, string>>();
+                        foreach (string mv in mvList)
+                        {
+                            if (!mv.Contains(":")) continue;
+                            string[] p = mv.Split(':');
+                            int lvl;
+                            if (int.TryParse(p[0], out lvl))
+                            {
+                                moves.Add(new KeyValuePair<int, string>(lvl, p[1].Trim().ToLower()));
+                            }
+                        }
+                        learnsets[mon] = moves;
+                    }
+                }
+                catch { }
+            }
+        }
+
+        private List<string> GetDefaultMovesForSpecies(string species, int level)
+        {
+            species = species.Trim().ToLower();
+            List<string> result = new List<string>();
+
+            if (learnsets.ContainsKey(species))
+            {
+                var moves = learnsets[species];
+                List<string> learned = new List<string>();
+                foreach (var pair in moves)
+                {
+                    if (pair.Key <= level)
+                    {
+                        // Add move if not already present or append
+                        learned.Add(pair.Value);
+                    }
+                }
+
+                if (learned.Count > 0)
+                {
+                    // Unique moves in reverse order (most recent)
+                    List<string> uniqueMoves = new List<string>();
+                    for (int i = learned.Count - 1; i >= 0 && uniqueMoves.Count < 4; i--)
+                    {
+                        if (!uniqueMoves.Contains(learned[i]))
+                        {
+                            uniqueMoves.Insert(0, learned[i]);
+                        }
+                    }
+                    return uniqueMoves;
+                }
+            }
+
+            // General fallback moves
+            if (species.Contains("char") || species.Contains("fire"))
+                return new List<string> { "scratch", "growl", "ember", "flamethrower" };
+            if (species.Contains("water") || species.Contains("squirt"))
+                return new List<string> { "tackle", "tail whip", "bubble", "water gun" };
+            if (species.Contains("grass") || species.Contains("bulb"))
+                return new List<string> { "tackle", "growl", "leech seed", "vine whip" };
+            if (species.Contains("machop") || species.Contains("fight"))
+                return new List<string> { "low kick", "leer", "karate chop", "seismic toss" };
+            if (species.Contains("mew"))
+                return new List<string> { "confusion", "psychic", "swift", "barrier" };
+
+            return new List<string> { "tackle", "growl" };
         }
 
         private void InitUI()
         {
-            // Top Header Panel
+            // Top Panel (Header)
             Panel topPanel = new Panel();
             topPanel.Dock = DockStyle.Top;
             topPanel.Height = 118;
             topPanel.BackColor = Color.FromArgb(32, 35, 44);
             this.Controls.Add(topPanel);
 
+            // Top Left Logo
+            PictureBox picLogo = new PictureBox();
+            picLogo.Location = new Point(16, 10);
+            picLogo.Size = new Size(46, 46);
+            picLogo.SizeMode = PictureBoxSizeMode.Zoom;
+            string logoPng = Path.Combine(gameDir, "app_logo.png");
+            if (!File.Exists(logoPng)) logoPng = @"C:\Users\Admin\.gemini\antigravity-ide\scratch\app_logo.png";
+            if (File.Exists(logoPng))
+            {
+                try { picLogo.Image = Image.FromFile(logoPng); } catch { }
+            }
+            topPanel.Controls.Add(picLogo);
+
             Label lblTitle = new Label();
             lblTitle.Text = "⚡ PokéWilds Mod Menu & Spawner";
             lblTitle.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
             lblTitle.ForeColor = Color.FromArgb(129, 140, 248);
-            lblTitle.Location = new Point(16, 12);
+            lblTitle.Location = new Point(70, 10);
             lblTitle.AutoSize = true;
             topPanel.Controls.Add(lblTitle);
 
@@ -203,29 +311,24 @@ namespace PokeWildsModMenu
             lblPlayerInfo.Text = "Player: Loading... | No Save Loaded";
             lblPlayerInfo.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             lblPlayerInfo.ForeColor = Color.FromArgb(156, 163, 175);
-            lblPlayerInfo.Location = new Point(18, 42);
+            lblPlayerInfo.Location = new Point(72, 38);
             lblPlayerInfo.AutoSize = true;
             topPanel.Controls.Add(lblPlayerInfo);
 
-            // Row 3: Navigation Tab Buttons
-            btnNavItems = CreateStyledButton("🎒 Items & Bag", 16, 70, 175, 36, Color.FromArgb(99, 102, 241));
+            // Row 3: 3 Navigation Tab Buttons (Equally distributed)
+            btnNavItems = CreateStyledButton("🎒 Items & Bag", 18, 70, 270, 38, Color.FromArgb(99, 102, 241));
             btnNavItems.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavItems.Click += delegate { SwitchTab(0); };
             topPanel.Controls.Add(btnNavItems);
 
-            btnNavPokemon = CreateStyledButton("⭐ Pokémon Spawner", 200, 70, 225, 36, Color.FromArgb(45, 49, 60));
+            btnNavPokemon = CreateStyledButton("⭐ Pokémon Spawner", 305, 70, 275, 38, Color.FromArgb(45, 49, 60));
             btnNavPokemon.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavPokemon.Click += delegate { SwitchTab(1); };
             topPanel.Controls.Add(btnNavPokemon);
 
-            btnNavCheats = CreateStyledButton("📜 GBA Cheat Codes", 435, 70, 195, 36, Color.FromArgb(45, 49, 60));
-            btnNavCheats.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
-            btnNavCheats.Click += delegate { SwitchTab(2); };
-            topPanel.Controls.Add(btnNavCheats);
-
-            btnNavWorld = CreateStyledButton("🌍 World & Time", 640, 70, 160, 36, Color.FromArgb(45, 49, 60));
+            btnNavWorld = CreateStyledButton("🌍 World & Time", 595, 70, 270, 38, Color.FromArgb(45, 49, 60));
             btnNavWorld.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
-            btnNavWorld.Click += delegate { SwitchTab(3); };
+            btnNavWorld.Click += delegate { SwitchTab(2); };
             topPanel.Controls.Add(btnNavWorld);
 
             // Bottom Status & Action Panel
@@ -264,14 +367,38 @@ namespace PokeWildsModMenu
             tabControl.SizeMode = TabSizeMode.Fixed;
             this.Controls.Add(tabControl);
 
-            topPanel.SendToBack();
-            bottomPanel.SendToBack();
-            tabControl.BringToFront();
-
             InitItemsTab();
             InitPokemonTab();
-            InitCheatCodesTab();
             InitWorldTab();
+
+            // Bring tab control forward
+            tabControl.BringToFront();
+        }
+
+        private void SwitchTab(int index)
+        {
+            tabControl.SelectedIndex = index;
+            btnNavItems.BackColor = index == 0 ? Color.FromArgb(99, 102, 241) : Color.FromArgb(45, 49, 60);
+            btnNavPokemon.BackColor = index == 1 ? Color.FromArgb(99, 102, 241) : Color.FromArgb(45, 49, 60);
+            btnNavWorld.BackColor = index == 2 ? Color.FromArgb(99, 102, 241) : Color.FromArgb(45, 49, 60);
+
+            // Always sync fresh save data from disk when navigating tabs!
+            LoadSelectedSave();
+        }
+
+        private Button CreateStyledButton(string text, int x, int y, int w, int h, Color bg)
+        {
+            Button btn = new Button();
+            btn.Text = text;
+            btn.Location = new Point(x, y);
+            btn.Size = new Size(w, h);
+            btn.BackColor = bg;
+            btn.ForeColor = Color.White;
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.Cursor = Cursors.Hand;
+            btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            return btn;
         }
 
         // ----------------------------------------------------
@@ -284,44 +411,44 @@ namespace PokeWildsModMenu
             tab.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
             tabControl.TabPages.Add(tab);
 
-            // Left Quick Cheats
+            // Left Column: Quick 1-Click Cheats
             GroupBox grpQuick = new GroupBox();
             grpQuick.Text = "⚡ Quick 1-Click Item Cheats";
             grpQuick.ForeColor = Color.FromArgb(129, 140, 248);
-            grpQuick.Location = new Point(16, 10);
-            grpQuick.Size = new Size(260, 450);
+            grpQuick.Location = new Point(15, 10);
+            grpQuick.Size = new Size(245, 440);
             tab.Controls.Add(grpQuick);
 
-            Button btnMasterBalls = CreateStyledButton("⭐ +99 Master Balls", 20, 30, 220, 36, Color.FromArgb(124, 58, 237));
-            btnMasterBalls.Click += delegate { AddItemDirectly("master ball", 99); };
-            grpQuick.Controls.Add(btnMasterBalls);
+            Button btn99Master = CreateStyledButton("★ +99 Master Balls", 15, 30, 215, 36, Color.FromArgb(147, 51, 234));
+            btn99Master.Click += delegate { AddItemDirectly("master ball", 99); };
+            grpQuick.Controls.Add(btn99Master);
 
-            Button btnRareCandies = CreateStyledButton("🍬 +99 Rare Candies", 20, 75, 220, 36, Color.FromArgb(236, 72, 153));
-            btnRareCandies.Click += delegate { AddItemDirectly("rare candy", 99); };
-            grpQuick.Controls.Add(btnRareCandies);
+            Button btn99Candy = CreateStyledButton("🍬 +99 Rare Candies", 15, 75, 215, 36, Color.FromArgb(236, 72, 153));
+            btn99Candy.Click += delegate { AddItemDirectly("rare candy", 99); };
+            grpQuick.Controls.Add(btn99Candy);
 
-            Button btnAllStones = CreateStyledButton("💎 +20 All Evo Stones", 20, 120, 220, 36, Color.FromArgb(14, 165, 233));
-            btnAllStones.Click += delegate { AddAllEvoStones(20); };
-            grpQuick.Controls.Add(btnAllStones);
+            Button btnStones = CreateStyledButton("💎 +20 All Evo Stones", 15, 120, 215, 36, Color.FromArgb(6, 182, 212));
+            btnStones.Click += delegate { AddAllEvoStones(20); };
+            grpQuick.Controls.Add(btnStones);
 
-            Button btnBerriesRopes = CreateStyledButton("🌿 +50 Berries & Ropes", 20, 165, 220, 36, Color.FromArgb(34, 197, 94));
-            btnBerriesRopes.Click += delegate { AddBerriesAndRopes(50); };
-            grpQuick.Controls.Add(btnBerriesRopes);
+            Button btnBerries = CreateStyledButton("🌿 +50 Berries & Ropes", 15, 165, 215, 36, Color.FromArgb(16, 185, 129));
+            btnBerries.Click += delegate { AddBerriesAndRopes(50); };
+            grpQuick.Controls.Add(btnBerries);
 
-            Button btnAllBalls = CreateStyledButton("🎯 +50 All Special Poké Balls", 20, 210, 220, 36, Color.FromArgb(245, 158, 11));
-            btnAllBalls.Click += delegate { AddAllPokeballs(50); };
-            grpQuick.Controls.Add(btnAllBalls);
+            Button btnSpecialBalls = CreateStyledButton("🎯 +50 All Special Poké Balls", 15, 210, 215, 36, Color.FromArgb(245, 158, 11));
+            btnSpecialBalls.Click += delegate { AddAllPokeballs(50); };
+            grpQuick.Controls.Add(btnSpecialBalls);
 
-            Button btnMaxExisting = CreateStyledButton("📦 Max All Items to 999", 20, 255, 220, 36, Color.FromArgb(239, 68, 68));
-            btnMaxExisting.Click += delegate { MaxOutAllItems(); };
-            grpQuick.Controls.Add(btnMaxExisting);
+            Button btnMaxAll = CreateStyledButton("📦 Max All Items to 999", 15, 255, 215, 36, Color.FromArgb(239, 68, 68));
+            btnMaxAll.Click += delegate { MaxOutAllItems(); };
+            grpQuick.Controls.Add(btnMaxAll);
 
-            // Center & Right: Custom Item Adder & Bag List
+            // Right Column: Custom Item Adder & Bag Contents
             GroupBox grpCustom = new GroupBox();
             grpCustom.Text = "➕ Custom Item Adder";
             grpCustom.ForeColor = Color.FromArgb(129, 140, 248);
-            grpCustom.Location = new Point(295, 10);
-            grpCustom.Size = new Size(575, 95);
+            grpCustom.Location = new Point(275, 10);
+            grpCustom.Size = new Size(595, 85);
             tab.Controls.Add(grpCustom);
 
             Label lblItem = new Label();
@@ -331,67 +458,69 @@ namespace PokeWildsModMenu
             grpCustom.Controls.Add(lblItem);
 
             cmbItemSelect = new ComboBox();
-            cmbItemSelect.Location = new Point(15, 48);
-            cmbItemSelect.Width = 230;
+            cmbItemSelect.Location = new Point(15, 45);
+            cmbItemSelect.Width = 220;
+            cmbItemSelect.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+            cmbItemSelect.AutoCompleteSource = AutoCompleteSource.ListItems;
             cmbItemSelect.BackColor = Color.FromArgb(45, 49, 60);
             cmbItemSelect.ForeColor = Color.White;
             foreach (string itm in allItems) cmbItemSelect.Items.Add(itm);
-            cmbItemSelect.SelectedIndex = 0;
+            if (cmbItemSelect.Items.Count > 0) cmbItemSelect.SelectedIndex = 0;
             grpCustom.Controls.Add(cmbItemSelect);
 
             Label lblQty = new Label();
             lblQty.Text = "Quantity:";
-            lblQty.Location = new Point(260, 22);
+            lblQty.Location = new Point(250, 22);
             lblQty.AutoSize = true;
             grpCustom.Controls.Add(lblQty);
 
             numItemQty = new NumericUpDown();
-            numItemQty.Location = new Point(260, 48);
-            numItemQty.Width = 85;
+            numItemQty.Location = new Point(250, 45);
+            numItemQty.Width = 75;
             numItemQty.Minimum = 1;
-            numItemQty.Maximum = 9999;
+            numItemQty.Maximum = 999;
             numItemQty.Value = 99;
             numItemQty.BackColor = Color.FromArgb(45, 49, 60);
             numItemQty.ForeColor = Color.White;
             grpCustom.Controls.Add(numItemQty);
 
-            Button btnAddCustom = CreateStyledButton("➕ Add to Bag", 365, 45, 190, 32, Color.FromArgb(16, 185, 129));
+            Button btnAddCustom = CreateStyledButton("➕ Add to Bag", 345, 43, 175, 28, Color.FromArgb(16, 185, 129));
             btnAddCustom.Click += delegate {
-                string itm = cmbItemSelect.Text.Trim().ToLower();
-                if (!string.IsNullOrEmpty(itm)) {
-                    AddItemDirectly(itm, (int)numItemQty.Value);
+                if (cmbItemSelect.SelectedItem != null)
+                {
+                    AddItemDirectly(cmbItemSelect.SelectedItem.ToString(), (int)numItemQty.Value);
                 }
             };
             grpCustom.Controls.Add(btnAddCustom);
 
-            // Bag Items ListView
+            // Bag Viewer
             GroupBox grpBag = new GroupBox();
             grpBag.Text = "🎒 Current Bag Contents";
             grpBag.ForeColor = Color.FromArgb(129, 140, 248);
-            grpBag.Location = new Point(295, 115);
-            grpBag.Size = new Size(575, 345);
+            grpBag.Location = new Point(275, 105);
+            grpBag.Size = new Size(595, 345);
             tab.Controls.Add(grpBag);
 
             listItems = new ListView();
-            listItems.Location = new Point(15, 25);
-            listItems.Size = new Size(420, 305);
             listItems.View = View.Details;
             listItems.FullRowSelect = true;
+            listItems.Location = new Point(15, 25);
+            listItems.Size = new Size(415, 305);
             listItems.BackColor = Color.FromArgb(32, 35, 44);
             listItems.ForeColor = Color.White;
             listItems.Columns.Add("Item Name", 260);
             listItems.Columns.Add("Quantity", 130);
             grpBag.Controls.Add(listItems);
 
-            Button btnRemoveItem = CreateStyledButton("❌ Remove", 450, 30, 110, 32, Color.FromArgb(239, 68, 68));
+            Button btnRemoveItem = CreateStyledButton("❌ Remove", 445, 30, 130, 34, Color.FromArgb(239, 68, 68));
             btnRemoveItem.Click += delegate { RemoveSelectedItem(); };
             grpBag.Controls.Add(btnRemoveItem);
 
-            Button btnPlus10 = CreateStyledButton("+10 Qty", 450, 75, 110, 30, Color.FromArgb(59, 130, 246));
+            Button btnPlus10 = CreateStyledButton("+10 Qty", 445, 80, 130, 32, Color.FromArgb(59, 130, 246));
             btnPlus10.Click += delegate { AdjustSelectedItem(10); };
             grpBag.Controls.Add(btnPlus10);
 
-            Button btnSet99 = CreateStyledButton("Set 99", 450, 115, 110, 30, Color.FromArgb(16, 185, 129));
+            Button btnSet99 = CreateStyledButton("Set 99", 445, 125, 130, 32, Color.FromArgb(16, 185, 129));
             btnSet99.Click += delegate { SetSelectedItemQty(99); };
             grpBag.Controls.Add(btnSet99);
         }
@@ -411,156 +540,149 @@ namespace PokeWildsModMenu
             grpParty.Text = "Party (Max 6)";
             grpParty.ForeColor = Color.FromArgb(129, 140, 248);
             grpParty.Location = new Point(12, 10);
-            grpParty.Size = new Size(265, 455);
+            grpParty.Size = new Size(265, 440);
             tab.Controls.Add(grpParty);
 
             listParty = new ListBox();
             listParty.Location = new Point(12, 25);
-            listParty.Size = new Size(240, 270);
+            listParty.Size = new Size(240, 260);
             listParty.BackColor = Color.FromArgb(32, 35, 44);
             listParty.ForeColor = Color.White;
             listParty.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             listParty.SelectedIndexChanged += delegate { DisplaySelectedPokemon(); };
             grpParty.Controls.Add(listParty);
 
-            Button btnPartyShiny = CreateStyledButton("✨ Make All Shiny", 12, 305, 240, 32, Color.FromArgb(245, 158, 11));
+            Button btnPartyShiny = CreateStyledButton("✨ Make All Shiny", 12, 300, 240, 36, Color.FromArgb(245, 158, 11));
             btnPartyShiny.Click += delegate { MakeEntirePartyShiny(); };
             grpParty.Controls.Add(btnPartyShiny);
 
-            Button btnPartyLvl100 = CreateStyledButton("⚡ Level 100 All", 12, 342, 240, 32, Color.FromArgb(16, 185, 129));
+            Button btnPartyLvl100 = CreateStyledButton("⚡ Level 100 All", 12, 345, 240, 36, Color.FromArgb(16, 185, 129));
             btnPartyLvl100.Click += delegate { Level100EntireParty(); };
             grpParty.Controls.Add(btnPartyLvl100);
 
-            Button btnReleasePoke = CreateStyledButton("❌ Release / Delete Selected", 12, 380, 240, 32, Color.FromArgb(239, 68, 68));
+            Button btnReleasePoke = CreateStyledButton("❌ Release / Delete Selected", 12, 390, 240, 36, Color.FromArgb(239, 68, 68));
             btnReleasePoke.Click += delegate { ReleaseSelectedPokemon(); };
             grpParty.Controls.Add(btnReleasePoke);
 
-            // Middle Column: Edit Selected Pokemon
+            // Middle Column: Edit Selected Pokemon (Clean, no attack move textboxes!)
             GroupBox grpDetails = new GroupBox();
             grpDetails.Text = "Edit Selected Pokémon";
             grpDetails.ForeColor = Color.FromArgb(129, 140, 248);
             grpDetails.Location = new Point(285, 10);
-            grpDetails.Size = new Size(280, 455);
+            grpDetails.Size = new Size(280, 440);
             tab.Controls.Add(grpDetails);
 
             Label lblNick = new Label();
             lblNick.Text = "Nickname:";
-            lblNick.Location = new Point(10, 25);
+            lblNick.Location = new Point(12, 30);
             lblNick.AutoSize = true;
             grpDetails.Controls.Add(lblNick);
 
             txtPokeNick = new TextBox();
-            txtPokeNick.Location = new Point(85, 22);
-            txtPokeNick.Width = 180;
+            txtPokeNick.Location = new Point(90, 26);
+            txtPokeNick.Width = 175;
             txtPokeNick.BackColor = Color.FromArgb(45, 49, 60);
             txtPokeNick.ForeColor = Color.White;
             grpDetails.Controls.Add(txtPokeNick);
 
             Label lblLvl = new Label();
             lblLvl.Text = "Level:";
-            lblLvl.Location = new Point(10, 60);
+            lblLvl.Location = new Point(12, 75);
             lblLvl.AutoSize = true;
             grpDetails.Controls.Add(lblLvl);
 
             numPokeLevel = new NumericUpDown();
-            numPokeLevel.Location = new Point(85, 58);
-            numPokeLevel.Width = 60;
+            numPokeLevel.Location = new Point(90, 72);
+            numPokeLevel.Width = 65;
             numPokeLevel.Minimum = 1;
             numPokeLevel.Maximum = 100;
             numPokeLevel.BackColor = Color.FromArgb(45, 49, 60);
             numPokeLevel.ForeColor = Color.White;
             grpDetails.Controls.Add(numPokeLevel);
 
-            Button btnLvl100 = CreateStyledButton("Lvl 100", 155, 56, 110, 26, Color.FromArgb(16, 185, 129));
+            Button btnLvl100 = CreateStyledButton("Max 100", 165, 71, 100, 26, Color.FromArgb(16, 185, 129));
             btnLvl100.Click += delegate { numPokeLevel.Value = 100; };
             grpDetails.Controls.Add(btnLvl100);
 
             Label lblHp = new Label();
             lblHp.Text = "HP:";
-            lblHp.Location = new Point(10, 95);
+            lblHp.Location = new Point(12, 120);
             lblHp.AutoSize = true;
             grpDetails.Controls.Add(lblHp);
 
             numPokeHp = new NumericUpDown();
-            numPokeHp.Location = new Point(85, 93);
-            numPokeHp.Width = 60;
+            numPokeHp.Location = new Point(90, 118);
+            numPokeHp.Width = 65;
             numPokeHp.Minimum = 1;
-            numPokeHp.Maximum = 9999;
+            numPokeHp.Maximum = 999;
+            numPokeHp.Value = 100;
             numPokeHp.BackColor = Color.FromArgb(45, 49, 60);
             numPokeHp.ForeColor = Color.White;
             grpDetails.Controls.Add(numPokeHp);
 
-            Button btnHeal = CreateStyledButton("💖 Heal (350)", 155, 91, 110, 26, Color.FromArgb(239, 68, 68));
-            btnHeal.Click += delegate { numPokeHp.Value = 350; };
-            grpDetails.Controls.Add(btnHeal);
+            Button btnFullHeal = CreateStyledButton("Full Heal", 165, 116, 100, 26, Color.FromArgb(59, 130, 246));
+            btnFullHeal.Click += delegate {
+                int lvl = (int)numPokeLevel.Value;
+                numPokeHp.Value = Math.Max(50, lvl * 4 + 30);
+            };
+            grpDetails.Controls.Add(btnFullHeal);
 
             Label lblFriend = new Label();
-            lblFriend.Text = "Friend:";
-            lblFriend.Location = new Point(10, 130);
+            lblFriend.Text = "Friendship:";
+            lblFriend.Location = new Point(12, 165);
             lblFriend.AutoSize = true;
             grpDetails.Controls.Add(lblFriend);
 
             numPokeFriend = new NumericUpDown();
-            numPokeFriend.Location = new Point(85, 128);
-            numPokeFriend.Width = 60;
+            numPokeFriend.Location = new Point(90, 162);
+            numPokeFriend.Width = 65;
             numPokeFriend.Minimum = 0;
             numPokeFriend.Maximum = 255;
             numPokeFriend.BackColor = Color.FromArgb(45, 49, 60);
             numPokeFriend.ForeColor = Color.White;
             grpDetails.Controls.Add(numPokeFriend);
 
-            Button btnMaxFriend = CreateStyledButton("Max (255)", 155, 126, 110, 26, Color.FromArgb(236, 72, 153));
+            Button btnMaxFriend = CreateStyledButton("Max (255)", 165, 161, 100, 26, Color.FromArgb(236, 72, 153));
             btnMaxFriend.Click += delegate { numPokeFriend.Value = 255; };
             grpDetails.Controls.Add(btnMaxFriend);
 
             chkPokeShiny = new CheckBox();
             chkPokeShiny.Text = "✨ Is Shiny Pokémon";
-            chkPokeShiny.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
+            chkPokeShiny.Font = new Font("Segoe UI", 10f, FontStyle.Bold);
             chkPokeShiny.ForeColor = Color.FromArgb(251, 191, 36);
-            chkPokeShiny.Location = new Point(10, 160);
+            chkPokeShiny.Location = new Point(12, 210);
             chkPokeShiny.AutoSize = true;
             grpDetails.Controls.Add(chkPokeShiny);
 
-            Label lblMoves = new Label();
-            lblMoves.Text = "Attacks (4 Moves):";
-            lblMoves.Location = new Point(10, 190);
-            lblMoves.AutoSize = true;
-            grpDetails.Controls.Add(lblMoves);
+            Label lblNoteNatural = new Label();
+            lblNoteNatural.Text = "🛡️ Moves Note:\nAttacks are kept 100% natural and learn automatically as your Pokémon battles and levels up!";
+            lblNoteNatural.Font = new Font("Segoe UI", 8.5f, FontStyle.Italic);
+            lblNoteNatural.ForeColor = Color.FromArgb(156, 163, 175);
+            lblNoteNatural.Location = new Point(12, 255);
+            lblNoteNatural.Size = new Size(255, 60);
+            grpDetails.Controls.Add(lblNoteNatural);
 
-            txtMove1 = new TextBox(); txtMove1.Location = new Point(10, 215); txtMove1.Width = 125; txtMove1.BackColor = Color.FromArgb(45, 49, 60); txtMove1.ForeColor = Color.White; grpDetails.Controls.Add(txtMove1);
-            txtMove2 = new TextBox(); txtMove2.Location = new Point(145, 215); txtMove2.Width = 125; txtMove2.BackColor = Color.FromArgb(45, 49, 60); txtMove2.ForeColor = Color.White; grpDetails.Controls.Add(txtMove2);
-            txtMove3 = new TextBox(); txtMove3.Location = new Point(10, 245); txtMove3.Width = 125; txtMove3.BackColor = Color.FromArgb(45, 49, 60); txtMove3.ForeColor = Color.White; grpDetails.Controls.Add(txtMove3);
-            txtMove4 = new TextBox(); txtMove4.Location = new Point(145, 245); txtMove4.Width = 125; txtMove4.BackColor = Color.FromArgb(45, 49, 60); txtMove4.ForeColor = Color.White; grpDetails.Controls.Add(txtMove4);
-
-            Button btnGodMoves = CreateStyledButton("🔥 God Moveset", 10, 280, 260, 28, Color.FromArgb(245, 158, 11));
-            btnGodMoves.Click += delegate {
-                txtMove1.Text = "flamethrower";
-                txtMove2.Text = "thunderbolt";
-                txtMove3.Text = "earthquake";
-                txtMove4.Text = "psychic";
-            };
-            grpDetails.Controls.Add(btnGodMoves);
-
-            Button btnSavePoke = CreateStyledButton("💾 Save Changes", 10, 318, 260, 36, Color.FromArgb(16, 185, 129));
+            Button btnSavePoke = CreateStyledButton("💾 Save Changes", 12, 350, 255, 45, Color.FromArgb(16, 185, 129));
+            btnSavePoke.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
             btnSavePoke.Click += delegate { SaveSelectedPokemonDetails(); };
             grpDetails.Controls.Add(btnSavePoke);
 
-            // Right Column: Spawn & Add Pokemon
+            // Right Column: Spawn & Add Pokemon (900+ Available)
             GroupBox grpSpawn = new GroupBox();
             grpSpawn.Text = "➕ Spawn / Add Pokémon (900+ Available)";
             grpSpawn.ForeColor = Color.FromArgb(52, 211, 153);
             grpSpawn.Location = new Point(575, 10);
-            grpSpawn.Size = new Size(300, 455);
+            grpSpawn.Size = new Size(300, 440);
             tab.Controls.Add(grpSpawn);
 
             Label lblChoose = new Label();
             lblChoose.Text = "Search Pokémon Name:";
-            lblChoose.Location = new Point(12, 22);
+            lblChoose.Location = new Point(12, 25);
             lblChoose.AutoSize = true;
             grpSpawn.Controls.Add(lblChoose);
 
             cmbSpawnPoke = new ComboBox();
-            cmbSpawnPoke.Location = new Point(12, 45);
+            cmbSpawnPoke.Location = new Point(12, 50);
             cmbSpawnPoke.Width = 270;
             cmbSpawnPoke.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
             cmbSpawnPoke.AutoCompleteSource = AutoCompleteSource.ListItems;
@@ -572,12 +694,12 @@ namespace PokeWildsModMenu
 
             Label lblSpawnLvl = new Label();
             lblSpawnLvl.Text = "Spawn Level:";
-            lblSpawnLvl.Location = new Point(12, 80);
+            lblSpawnLvl.Location = new Point(12, 90);
             lblSpawnLvl.AutoSize = true;
             grpSpawn.Controls.Add(lblSpawnLvl);
 
             numSpawnLevel = new NumericUpDown();
-            numSpawnLevel.Location = new Point(105, 78);
+            numSpawnLevel.Location = new Point(105, 88);
             numSpawnLevel.Width = 65;
             numSpawnLevel.Minimum = 1;
             numSpawnLevel.Maximum = 100;
@@ -586,36 +708,34 @@ namespace PokeWildsModMenu
             numSpawnLevel.ForeColor = Color.White;
             grpSpawn.Controls.Add(numSpawnLevel);
 
-            Button btnSpawnLvl100 = CreateStyledButton("Max 100", 180, 76, 100, 26, Color.FromArgb(16, 185, 129));
+            Button btnSpawnLvl100 = CreateStyledButton("Max 100", 180, 86, 100, 26, Color.FromArgb(16, 185, 129));
             btnSpawnLvl100.Click += delegate { numSpawnLevel.Value = 100; };
             grpSpawn.Controls.Add(btnSpawnLvl100);
 
             Label lblGender = new Label();
             lblGender.Text = "Gender:";
-            lblGender.Location = new Point(12, 115);
+            lblGender.Location = new Point(12, 130);
             lblGender.AutoSize = true;
             grpSpawn.Controls.Add(lblGender);
 
             cmbSpawnGender = new ComboBox();
             cmbSpawnGender.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSpawnGender.Location = new Point(105, 112);
+            cmbSpawnGender.Location = new Point(105, 126);
             cmbSpawnGender.Width = 175;
             cmbSpawnGender.BackColor = Color.FromArgb(45, 49, 60);
             cmbSpawnGender.ForeColor = Color.White;
-            cmbSpawnGender.Items.Add("male");
-            cmbSpawnGender.Items.Add("female");
-            cmbSpawnGender.Items.Add("genderless");
+            cmbSpawnGender.Items.AddRange(new string[] { "male", "female", "genderless" });
             cmbSpawnGender.SelectedIndex = 0;
             grpSpawn.Controls.Add(cmbSpawnGender);
 
-            Label lblSpawnNick = new Label();
-            lblSpawnNick.Text = "Nickname:";
-            lblSpawnNick.Location = new Point(12, 150);
-            lblSpawnNick.AutoSize = true;
-            grpSpawn.Controls.Add(lblSpawnNick);
+            Label lblCustomNick = new Label();
+            lblCustomNick.Text = "Nickname:";
+            lblCustomNick.Location = new Point(12, 170);
+            lblCustomNick.AutoSize = true;
+            grpSpawn.Controls.Add(lblCustomNick);
 
             txtSpawnNick = new TextBox();
-            txtSpawnNick.Location = new Point(105, 147);
+            txtSpawnNick.Location = new Point(105, 166);
             txtSpawnNick.Width = 175;
             txtSpawnNick.BackColor = Color.FromArgb(45, 49, 60);
             txtSpawnNick.ForeColor = Color.White;
@@ -623,136 +743,54 @@ namespace PokeWildsModMenu
 
             chkSpawnShiny = new CheckBox();
             chkSpawnShiny.Text = "✨ Spawn as Shiny Pokémon!";
-            chkSpawnShiny.Checked = true;
             chkSpawnShiny.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
             chkSpawnShiny.ForeColor = Color.FromArgb(251, 191, 36);
-            chkSpawnShiny.Location = new Point(12, 180);
+            chkSpawnShiny.Location = new Point(12, 205);
             chkSpawnShiny.AutoSize = true;
             grpSpawn.Controls.Add(chkSpawnShiny);
 
-            Button btnAddPokemon = CreateStyledButton("➕ Add to Party (Slot)", 12, 212, 270, 42, Color.FromArgb(16, 185, 129));
-            btnAddPokemon.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
-            btnAddPokemon.Click += delegate {
-                string pName = cmbSpawnPoke.Text.Trim().ToLower();
-                if (!string.IsNullOrEmpty(pName))
+            Button btnAddSpawn = CreateStyledButton("➕ Add to Party (Slot)", 12, 240, 275, 42, Color.FromArgb(16, 185, 129));
+            btnAddSpawn.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+            btnAddSpawn.Click += delegate {
+                if (cmbSpawnPoke.SelectedItem != null)
                 {
-                    AddNewPokemonToParty(pName, (int)numSpawnLevel.Value, chkSpawnShiny.Checked, cmbSpawnGender.Text, txtSpawnNick.Text.Trim());
+                    string p = cmbSpawnPoke.SelectedItem.ToString();
+                    int lvl = (int)numSpawnLevel.Value;
+                    bool isSh = chkSpawnShiny.Checked;
+                    string gen = cmbSpawnGender.SelectedItem != null ? cmbSpawnGender.SelectedItem.ToString() : "male";
+                    string nk = txtSpawnNick.Text.Trim();
+                    AddNewPokemonToParty(p, lvl, isSh, gen, nk);
                 }
             };
-            grpSpawn.Controls.Add(btnAddPokemon);
+            grpSpawn.Controls.Add(btnAddSpawn);
 
+            // Preset fast spawners
             Label lblPresets = new Label();
-            lblPresets.Text = "⚡ Quick Preset Spawners:";
-            lblPresets.Location = new Point(12, 265);
+            lblPresets.Text = "Quick Preset Spawners:";
+            lblPresets.ForeColor = Color.FromArgb(156, 163, 175);
+            lblPresets.Location = new Point(12, 290);
             lblPresets.AutoSize = true;
             grpSpawn.Controls.Add(lblPresets);
 
-            Button btnMewtwo = CreateStyledButton("🔮 Shiny Mewtwo (Lvl 100)", 12, 290, 270, 30, Color.FromArgb(124, 58, 237));
-            btnMewtwo.Click += delegate { AddNewPokemonToParty("mewtwo", 100, true, "genderless", "Mewtwo"); };
-            grpSpawn.Controls.Add(btnMewtwo);
+            Button btnPresetMewtwo = CreateStyledButton("★ Shiny Mewtwo (Lvl 100)", 12, 315, 275, 26, Color.FromArgb(147, 51, 234));
+            btnPresetMewtwo.Click += delegate { AddNewPokemonToParty("mewtwo", 100, true, "genderless", "mewtwo"); };
+            grpSpawn.Controls.Add(btnPresetMewtwo);
 
-            Button btnCharizard = CreateStyledButton("🔥 Shiny Charizard (Lvl 100)", 12, 325, 270, 30, Color.FromArgb(239, 68, 68));
-            btnCharizard.Click += delegate { AddNewPokemonToParty("charizard", 100, true, "male", "Charizard"); };
-            grpSpawn.Controls.Add(btnCharizard);
+            Button btnPresetCharizard = CreateStyledButton("🔥 Shiny Charizard (Lvl 100)", 12, 345, 275, 26, Color.FromArgb(239, 68, 68));
+            btnPresetCharizard.Click += delegate { AddNewPokemonToParty("charizard", 100, true, "male", "charizard"); };
+            grpSpawn.Controls.Add(btnPresetCharizard);
 
-            Button btnRayquaza = CreateStyledButton("🐉 Shiny Rayquaza (Lvl 100)", 12, 360, 270, 30, Color.FromArgb(34, 197, 94));
-            btnRayquaza.Click += delegate { AddNewPokemonToParty("rayquaza", 100, true, "genderless", "Rayquaza"); };
-            grpSpawn.Controls.Add(btnRayquaza);
+            Button btnPresetRayquaza = CreateStyledButton("🐉 Shiny Rayquaza (Lvl 100)", 12, 375, 275, 26, Color.FromArgb(16, 185, 129));
+            btnPresetRayquaza.Click += delegate { AddNewPokemonToParty("rayquaza", 100, true, "genderless", "rayquaza"); };
+            grpSpawn.Controls.Add(btnPresetRayquaza);
 
-            Button btnGengar = CreateStyledButton("👻 Shiny Gengar (Lvl 100)", 12, 395, 270, 30, Color.FromArgb(147, 51, 234));
-            btnGengar.Click += delegate { AddNewPokemonToParty("gengar", 100, true, "male", "Gengar"); };
-            grpSpawn.Controls.Add(btnGengar);
+            Button btnPresetGengar = CreateStyledButton("👻 Shiny Gengar (Lvl 100)", 12, 405, 275, 26, Color.FromArgb(139, 92, 246));
+            btnPresetGengar.Click += delegate { AddNewPokemonToParty("gengar", 100, true, "male", "gengar"); };
+            grpSpawn.Controls.Add(btnPresetGengar);
         }
 
         // ----------------------------------------------------
-        // TAB 3: GBA CHEAT CODES CONSOLE
-        // ----------------------------------------------------
-        private void InitCheatCodesTab()
-        {
-            TabPage tab = new TabPage("Cheats");
-            tab.BackColor = Color.FromArgb(24, 26, 32);
-            tab.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            tabControl.TabPages.Add(tab);
-
-            Label lblInfo = new Label();
-            lblInfo.Text = "Enter classic GameShark / Action Replay style cheat codes below:";
-            lblInfo.Location = new Point(20, 20);
-            lblInfo.AutoSize = true;
-            tab.Controls.Add(lblInfo);
-
-            txtCheatCode = new TextBox();
-            txtCheatCode.Location = new Point(20, 50);
-            txtCheatCode.Width = 570;
-            txtCheatCode.Font = new Font("Consolas", 12f, FontStyle.Bold);
-            txtCheatCode.BackColor = Color.FromArgb(32, 35, 44);
-            txtCheatCode.ForeColor = Color.FromArgb(52, 211, 153);
-            txtCheatCode.KeyDown += delegate(object s, KeyEventArgs e) {
-                if (e.KeyCode == Keys.Enter) {
-                    ExecuteCheatCode(txtCheatCode.Text);
-                    e.SuppressKeyPress = true;
-                }
-            };
-            tab.Controls.Add(txtCheatCode);
-
-            Button btnExec = CreateStyledButton("⚡ Execute Cheat Code", 610, 48, 250, 32, Color.FromArgb(124, 58, 237));
-            btnExec.Click += delegate { ExecuteCheatCode(txtCheatCode.Text); };
-            tab.Controls.Add(btnExec);
-
-            // Quick Cheat Code library
-            GroupBox grpCheatList = new GroupBox();
-            grpCheatList.Text = "Supported Cheat Codes (Click to Copy)";
-            grpCheatList.ForeColor = Color.FromArgb(129, 140, 248);
-            grpCheatList.Location = new Point(20, 95);
-            grpCheatList.Size = new Size(370, 355);
-            tab.Controls.Add(grpCheatList);
-
-            ListBox listSupported = new ListBox();
-            listSupported.Location = new Point(15, 25);
-            listSupported.Size = new Size(340, 315);
-            listSupported.BackColor = Color.FromArgb(32, 35, 44);
-            listSupported.ForeColor = Color.FromArgb(251, 191, 36);
-            listSupported.Font = new Font("Consolas", 9.5f);
-            listSupported.Items.Add("POKEMON MEWTWO 100 SHINY");
-            listSupported.Items.Add("POKEMON CHARIZARD 100 SHINY");
-            listSupported.Items.Add("POKEMON RAYQUAZA 100");
-            listSupported.Items.Add("POKEMON PIKACHU 50 SHINY");
-            listSupported.Items.Add("MASTERBALL 99");
-            listSupported.Items.Add("RARECANDY 99");
-            listSupported.Items.Add("SHINY ALL");
-            listSupported.Items.Add("LEVEL 100");
-            listSupported.Items.Add("HEAL");
-            listSupported.Items.Add("ALLSTONES 20");
-            listSupported.Items.Add("GIVE <item> <qty>");
-            listSupported.Items.Add("SET TIME DAY");
-            listSupported.Items.Add("SET TIME NIGHT");
-            listSupported.Items.Add("MAXITEMS");
-            listSupported.DoubleClick += delegate {
-                if (listSupported.SelectedItem != null) {
-                    txtCheatCode.Text = listSupported.SelectedItem.ToString();
-                }
-            };
-            grpCheatList.Controls.Add(listSupported);
-
-            // Log output
-            GroupBox grpLog = new GroupBox();
-            grpLog.Text = "Cheat Console Output";
-            grpLog.ForeColor = Color.FromArgb(129, 140, 248);
-            grpLog.Location = new Point(410, 95);
-            grpLog.Size = new Size(460, 355);
-            tab.Controls.Add(grpLog);
-
-            listCheatLog = new ListBox();
-            listCheatLog.Location = new Point(15, 25);
-            listCheatLog.Size = new Size(430, 315);
-            listCheatLog.BackColor = Color.FromArgb(18, 20, 24);
-            listCheatLog.ForeColor = Color.FromArgb(52, 211, 153);
-            listCheatLog.Font = new Font("Consolas", 9f);
-            listCheatLog.Items.Add("[System] Mod Menu & Spawner Console Ready.");
-            grpLog.Controls.Add(listCheatLog);
-        }
-
-        // ----------------------------------------------------
-        // TAB 4: WORLD CHEATS
+        // TAB 3: WORLD CHEATS & BACKUPS
         // ----------------------------------------------------
         private void InitWorldTab()
         {
@@ -818,6 +856,7 @@ namespace PokeWildsModMenu
         // ----------------------------------------------------
         private void ScanSaves()
         {
+            string prevSelected = cmbSaves.SelectedItem != null ? cmbSaves.SelectedItem.ToString() : "";
             cmbSaves.Items.Clear();
             if (!Directory.Exists(gameDir)) return;
 
@@ -829,7 +868,19 @@ namespace PokeWildsModMenu
 
             if (cmbSaves.Items.Count > 0)
             {
-                cmbSaves.SelectedIndex = 0;
+                int matchIdx = -1;
+                if (!string.IsNullOrEmpty(prevSelected))
+                {
+                    for (int i = 0; i < cmbSaves.Items.Count; i++)
+                    {
+                        if (cmbSaves.Items[i].ToString().Equals(prevSelected, StringComparison.OrdinalIgnoreCase))
+                        {
+                            matchIdx = i;
+                            break;
+                        }
+                    }
+                }
+                cmbSaves.SelectedIndex = matchIdx >= 0 ? matchIdx : 0;
             }
             else
             {
@@ -902,28 +953,41 @@ namespace PokeWildsModMenu
                     }
                 }
 
-                // Party list
+                // Party list (Support IList for ArrayList from JavaScriptSerializer!)
+                int prevSelected = listParty.SelectedIndex;
                 listParty.Items.Clear();
                 if (player.ContainsKey("pokemon"))
                 {
-                    object[] pokeList = player["pokemon"] as object[];
+                    IList pokeList = player["pokemon"] as IList;
                     if (pokeList != null)
                     {
-                        for (int i = 0; i < pokeList.Length; i++)
+                        for (int i = 0; i < pokeList.Count; i++)
                         {
                             var pDict = pokeList[i] as Dictionary<string, object>;
                             if (pDict != null)
                             {
-                                string pNick = pDict.ContainsKey("nickname") ? pDict["nickname"].ToString() : "Pokemon";
+                                string pNameStr = pDict.ContainsKey("nickname") ? pDict["nickname"].ToString() : (pDict.ContainsKey("name") ? pDict["name"].ToString() : "Pokemon");
                                 string pLvl = pDict.ContainsKey("level") ? pDict["level"].ToString() : "1";
                                 bool isShiny = pDict.ContainsKey("isShiny") && Convert.ToBoolean(pDict["isShiny"]);
                                 string shinyBadge = isShiny ? "✨ " : "";
-                                listParty.Items.Add(string.Format("{0}. {1}{2} (Lvl {3})", i + 1, shinyBadge, pNick, pLvl));
+                                listParty.Items.Add(string.Format("{0}. {1}{2} (Lvl {3})", i + 1, shinyBadge, pNameStr, pLvl));
                             }
                         }
                     }
                 }
-                if (listParty.Items.Count > 0) listParty.SelectedIndex = 0;
+
+                if (listParty.Items.Count > 0)
+                {
+                    listParty.SelectedIndex = (prevSelected >= 0 && prevSelected < listParty.Items.Count) ? prevSelected : 0;
+                }
+                else
+                {
+                    txtPokeNick.Clear();
+                    numPokeLevel.Value = 1;
+                    numPokeHp.Value = 20;
+                    numPokeFriend.Value = 70;
+                    chkPokeShiny.Checked = false;
+                }
 
                 // Time of day
                 if (saveData.ContainsKey("timeOfDay"))
@@ -941,30 +1005,17 @@ namespace PokeWildsModMenu
             if (listParty.SelectedIndex < 0 || saveData == null) return;
             var player = saveData["playerData"] as Dictionary<string, object>;
             if (player == null) return;
-            var pokeList = player["pokemon"] as object[];
-            if (pokeList == null || listParty.SelectedIndex >= pokeList.Length) return;
+            var pokeList = player["pokemon"] as IList;
+            if (pokeList == null || listParty.SelectedIndex >= pokeList.Count) return;
 
             var p = pokeList[listParty.SelectedIndex] as Dictionary<string, object>;
             if (p == null) return;
 
-            txtPokeNick.Text = p.ContainsKey("nickname") ? p["nickname"].ToString() : "";
-            numPokeLevel.Value = p.ContainsKey("level") ? Convert.ToInt32(p["level"]) : 1;
-            numPokeHp.Value = p.ContainsKey("hp") ? Convert.ToInt32(p["hp"]) : 20;
-            numPokeFriend.Value = p.ContainsKey("friendliness") ? Convert.ToInt32(p["friendliness"]) : 70;
+            txtPokeNick.Text = p.ContainsKey("nickname") ? p["nickname"].ToString() : (p.ContainsKey("name") ? p["name"].ToString() : "");
+            numPokeLevel.Value = p.ContainsKey("level") ? Math.Min(100, Math.Max(1, Convert.ToInt32(p["level"]))) : 1;
+            numPokeHp.Value = p.ContainsKey("hp") ? Math.Min(999, Math.Max(1, Convert.ToInt32(p["hp"]))) : 20;
+            numPokeFriend.Value = p.ContainsKey("friendliness") ? Math.Min(255, Math.Max(0, Convert.ToInt32(p["friendliness"]))) : 70;
             chkPokeShiny.Checked = p.ContainsKey("isShiny") && Convert.ToBoolean(p["isShiny"]);
-
-            txtMove1.Clear(); txtMove2.Clear(); txtMove3.Clear(); txtMove4.Clear();
-            if (p.ContainsKey("attacks"))
-            {
-                object[] att = p["attacks"] as object[];
-                if (att != null)
-                {
-                    if (att.Length > 0 && att[0] != null) txtMove1.Text = att[0].ToString();
-                    if (att.Length > 1 && att[1] != null) txtMove2.Text = att[1].ToString();
-                    if (att.Length > 2 && att[2] != null) txtMove3.Text = att[2].ToString();
-                    if (att.Length > 3 && att[3] != null) txtMove4.Text = att[3].ToString();
-                }
-            }
         }
 
         private void SaveSelectedPokemonDetails()
@@ -972,24 +1023,35 @@ namespace PokeWildsModMenu
             if (listParty.SelectedIndex < 0 || saveData == null) return;
             var player = saveData["playerData"] as Dictionary<string, object>;
             if (player == null) return;
-            var pokeList = player["pokemon"] as object[];
-            if (pokeList == null || listParty.SelectedIndex >= pokeList.Length) return;
+            var pokeList = player["pokemon"] as IList;
+            if (pokeList == null || listParty.SelectedIndex >= pokeList.Count) return;
 
             var p = pokeList[listParty.SelectedIndex] as Dictionary<string, object>;
             if (p == null) return;
 
-            p["nickname"] = txtPokeNick.Text.Trim();
-            p["level"] = (int)numPokeLevel.Value;
+            string newNick = txtPokeNick.Text.Trim();
+            if (!string.IsNullOrEmpty(newNick)) p["nickname"] = newNick;
+
+            int newLvl = (int)numPokeLevel.Value;
+            p["level"] = newLvl;
+
+            // FIX: Re-calculate EXP properly so game doesn't level-up in an endless loop!
+            if (newLvl <= 1)
+            {
+                p["exp"] = 0;
+            }
+            else
+            {
+                // Pokemon Medium-Slow curve: 1.2*n^3 - 15*n^2 + 100*n - 140
+                int calculatedExp = (int)Math.Max(0, (1.2 * newLvl * newLvl * newLvl) - (15.0 * newLvl * newLvl) + (100.0 * newLvl) - 140);
+                p["exp"] = calculatedExp;
+            }
+
             p["hp"] = (int)numPokeHp.Value;
             p["friendliness"] = (int)numPokeFriend.Value;
             p["isShiny"] = chkPokeShiny.Checked;
 
-            p["attacks"] = new object[] {
-                string.IsNullOrEmpty(txtMove1.Text.Trim()) ? null : (object)txtMove1.Text.Trim().ToLower(),
-                string.IsNullOrEmpty(txtMove2.Text.Trim()) ? null : (object)txtMove2.Text.Trim().ToLower(),
-                string.IsNullOrEmpty(txtMove3.Text.Trim()) ? null : (object)txtMove3.Text.Trim().ToLower(),
-                string.IsNullOrEmpty(txtMove4.Text.Trim()) ? null : (object)txtMove4.Text.Trim().ToLower()
-            };
+            // Note: attacks are kept untouched to preserve natural moves!
 
             // Also update currPokemon if it is slot 0
             if (listParty.SelectedIndex == 0 && player.ContainsKey("currPokemon"))
@@ -1011,9 +1073,12 @@ namespace PokeWildsModMenu
             if (player == null) return;
 
             List<object> list = new List<object>();
-            if (player.ContainsKey("pokemon") && player["pokemon"] is object[])
+            if (player.ContainsKey("pokemon") && player["pokemon"] is IList)
             {
-                list.AddRange((object[])player["pokemon"]);
+                foreach (var item in (IList)player["pokemon"])
+                {
+                    list.Add(item);
+                }
             }
 
             if (list.Count >= 6)
@@ -1025,7 +1090,12 @@ namespace PokeWildsModMenu
             string cleanName = pokeName.Trim().ToLower();
             string cleanNick = string.IsNullOrEmpty(nick) ? cleanName : nick.Trim();
             int hpVal = Math.Max(40, level * 3 + 25);
-            int expVal = level * level * level;
+            
+            // Proper EXP formula for the spawned level
+            int expVal = level <= 1 ? 0 : (int)Math.Max(0, (1.2 * level * level * level) - (15.0 * level * level) + (100.0 * level) - 140);
+
+            // Natural default moves for this species and level
+            List<string> naturalMoves = GetDefaultMovesForSpecies(cleanName, level);
 
             Dictionary<string, object> newPoke = new Dictionary<string, object>();
             newPoke["name"] = cleanName;
@@ -1039,9 +1109,9 @@ namespace PokeWildsModMenu
             newPoke["test"] = false;
             newPoke["generation"] = "CRYSTAL";
             newPoke["isShiny"] = isShiny;
-            newPoke["attacks"] = new object[] { "flamethrower", "thunderbolt", "earthquake", "psychic" };
+            newPoke["attacks"] = naturalMoves.ToArray();
             newPoke["index"] = list.Count;
-            newPoke["previousOwnerName"] = player.ContainsKey("name") ? player["name"].ToString() : "adi";
+            newPoke["previousOwnerName"] = player.ContainsKey("name") ? player["name"].ToString() : "Player";
             newPoke["position"] = 0;
             newPoke["interiorIndex"] = 100;
             newPoke["isInterior"] = false;
@@ -1068,9 +1138,12 @@ namespace PokeWildsModMenu
             if (player == null) return;
 
             List<object> list = new List<object>();
-            if (player.ContainsKey("pokemon") && player["pokemon"] is object[])
+            if (player.ContainsKey("pokemon") && player["pokemon"] is IList)
             {
-                list.AddRange((object[])player["pokemon"]);
+                foreach (var item in (IList)player["pokemon"])
+                {
+                    list.Add(item);
+                }
             }
 
             if (list.Count <= 1)
@@ -1108,7 +1181,7 @@ namespace PokeWildsModMenu
             if (saveData == null) return;
             var player = saveData["playerData"] as Dictionary<string, object>;
             if (player == null) return;
-            var pokeList = player["pokemon"] as object[];
+            var pokeList = player["pokemon"] as IList;
             if (pokeList == null) return;
 
             foreach (var pObj in pokeList)
@@ -1130,7 +1203,7 @@ namespace PokeWildsModMenu
             if (saveData == null) return;
             var player = saveData["playerData"] as Dictionary<string, object>;
             if (player == null) return;
-            var pokeList = player["pokemon"] as object[];
+            var pokeList = player["pokemon"] as IList;
             if (pokeList == null) return;
 
             foreach (var pObj in pokeList)
@@ -1254,205 +1327,72 @@ namespace PokeWildsModMenu
             }
         }
 
-        // ----------------------------------------------------
-        // CHEAT CODE PARSER
-        // ----------------------------------------------------
-        private void ExecuteCheatCode(string rawCode)
-        {
-            if (string.IsNullOrEmpty(rawCode)) return;
-            string code = rawCode.Trim().ToUpper();
-            string[] parts = code.Split(new char[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0) return;
-
-            string cmd = parts[0];
-            try
-            {
-                if (cmd == "POKEMON" || cmd == "SPAWN")
-                {
-                    if (parts.Length >= 2)
-                    {
-                        string pName = parts[1].ToLower();
-                        int lvl = 50;
-                        bool shiny = false;
-                        if (parts.Length >= 3) int.TryParse(parts[2], out lvl);
-                        if (parts.Length >= 4 && parts[3] == "SHINY") shiny = true;
-                        if (code.Contains("SHINY")) shiny = true;
-
-                        AddNewPokemonToParty(pName, lvl, shiny, "male", pName);
-                        LogCheat(string.Format("[ACTIVATED] Spawned {0} (Lvl {1}, Shiny: {2})", pName, lvl, shiny));
-                    }
-                }
-                else if (cmd == "MASTERBALL" || cmd == "MASTER_BALL")
-                {
-                    int qty = parts.Length > 1 ? int.Parse(parts[1]) : 99;
-                    AddItemDirectly("master ball", qty);
-                    LogCheat(string.Format("[ACTIVATED] +{0} Master Balls added!", qty));
-                }
-                else if (cmd == "RARECANDY" || cmd == "RARE_CANDY")
-                {
-                    int qty = parts.Length > 1 ? int.Parse(parts[1]) : 99;
-                    AddItemDirectly("rare candy", qty);
-                    LogCheat(string.Format("[ACTIVATED] +{0} Rare Candies added!", qty));
-                }
-                else if (cmd == "SHINY")
-                {
-                    MakeEntirePartyShiny();
-                    LogCheat("[ACTIVATED] All Party Pokémon turned SHINY!");
-                }
-                else if (cmd == "LEVEL" || cmd == "LEVEL100" || cmd == "MAXLEVEL")
-                {
-                    int lvl = parts.Length > 1 ? int.Parse(parts[1]) : 100;
-                    if (saveData != null)
-                    {
-                        var player = saveData["playerData"] as Dictionary<string, object>;
-                        var pokeList = player["pokemon"] as object[];
-                        foreach (var p in pokeList) ((Dictionary<string, object>)p)["level"] = lvl;
-                        ApplyAndSave("Set party level to " + lvl);
-                        RefreshUIFromData();
-                    }
-                    LogCheat("[ACTIVATED] Party Level set to " + lvl);
-                }
-                else if (cmd == "HEAL")
-                {
-                    if (saveData != null)
-                    {
-                        var player = saveData["playerData"] as Dictionary<string, object>;
-                        var pokeList = player["pokemon"] as object[];
-                        foreach (var p in pokeList) ((Dictionary<string, object>)p)["hp"] = 350;
-                        ApplyAndSave("Fully healed all party Pokemon!");
-                        RefreshUIFromData();
-                    }
-                    LogCheat("[ACTIVATED] Party fully healed!");
-                }
-                else if (cmd == "ALLSTONES")
-                {
-                    int qty = parts.Length > 1 ? int.Parse(parts[1]) : 20;
-                    AddAllEvoStones(qty);
-                    LogCheat(string.Format("[ACTIVATED] +{0} All Evolution Stones added!", qty));
-                }
-                else if (cmd == "MAXITEMS")
-                {
-                    MaxOutAllItems();
-                    LogCheat("[ACTIVATED] Maxed out all bag items to 999!");
-                }
-                else if (cmd == "GIVE")
-                {
-                    if (parts.Length >= 2)
-                    {
-                        int qty = parts.Length >= 3 ? int.Parse(parts[parts.Length - 1]) : 99;
-                        int nameTokens = parts.Length >= 3 ? parts.Length - 2 : parts.Length - 1;
-                        string itm = "";
-                        for (int i = 1; i <= nameTokens; i++) itm += parts[i].ToLower() + " ";
-                        itm = itm.Trim();
-                        AddItemDirectly(itm, qty);
-                        LogCheat(string.Format("[ACTIVATED] Given {0} x{1}", itm, qty));
-                    }
-                }
-                else if (cmd == "SET" && parts.Length >= 3 && parts[1] == "TIME")
-                {
-                    string tod = parts[2].ToLower();
-                    if (saveData != null)
-                    {
-                        saveData["timeOfDay"] = tod;
-                        ApplyAndSave("Time of day set to " + tod);
-                        RefreshUIFromData();
-                    }
-                    LogCheat("[ACTIVATED] Time set to " + tod);
-                }
-                else
-                {
-                    LogCheat("[ERROR] Unknown cheat code: " + rawCode);
-                }
-            }
-            catch (Exception ex)
-            {
-                LogCheat("[ERROR] " + ex.Message);
-            }
-            txtCheatCode.Clear();
-        }
-
-        private void LogCheat(string msg)
-        {
-            listCheatLog.Items.Add(string.Format("[{0:HH:mm:ss}] {1}", DateTime.Now, msg));
-            listCheatLog.SelectedIndex = listCheatLog.Items.Count - 1;
-        }
-
-        // ----------------------------------------------------
-        // SAVE & BACKUP OPERATIONS
-        // ----------------------------------------------------
-        private void ApplyAndSave(string successMessage)
-        {
-            if (saveData == null || string.IsNullOrEmpty(activeZipPath)) return;
-
-            try
-            {
-                string bakPath = activeZipPath + ".bak";
-                if (File.Exists(activeZipPath))
-                {
-                    File.Copy(activeZipPath, bakPath, true);
-                }
-
-                string newJson = jsonSer.Serialize(saveData);
-
-                using (var zip = ZipFile.Open(activeZipPath, ZipArchiveMode.Update))
-                {
-                    var oldEntry = zip.GetEntry("data.json");
-                    if (oldEntry == null) oldEntry = zip.GetEntry("game.json");
-                    if (oldEntry != null) oldEntry.Delete();
-
-                    var newEntry = zip.CreateEntry("data.json", CompressionLevel.Optimal);
-                    using (var writer = new StreamWriter(newEntry.Open()))
-                    {
-                        writer.Write(newJson);
-                    }
-                }
-
-                lblStatus.Text = successMessage + " (Saved at " + DateTime.Now.ToString("HH:mm:ss") + ")";
-                lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
-            }
-            catch (Exception ex)
-            {
-                lblStatus.Text = "Save Error: " + ex.Message;
-                lblStatus.ForeColor = Color.FromArgb(239, 68, 68);
-                MessageBox.Show("Failed to save changes: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
-        }
-
         private void RestoreBackup()
         {
             if (string.IsNullOrEmpty(activeZipPath)) return;
             string bakPath = activeZipPath + ".bak";
             if (!File.Exists(bakPath))
             {
-                MessageBox.Show("No backup file found (.bak)!", "Notice", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("No .bak backup found for this world!", "Backup Missing", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
-            try
+            DialogResult res = MessageBox.Show("Restore save from original .bak backup? Current changes will be overwritten.", "Confirm Restore", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+            if (res == DialogResult.Yes)
             {
-                File.Copy(bakPath, activeZipPath, true);
-                LoadSelectedSave();
-                MessageBox.Show("Original save restored successfully from backup!", "Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Restore failed: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                try
+                {
+                    File.Copy(bakPath, activeZipPath, true);
+                    LoadSelectedSave();
+                    MessageBox.Show("Save restored from backup successfully!", "Restored", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Restore failed: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
             }
         }
 
-        private Button CreateStyledButton(string text, int x, int y, int w, int h, Color bg)
+        private void ApplyAndSave(string statusMsg)
         {
-            Button btn = new Button();
-            btn.Text = text;
-            btn.Location = new Point(x, y);
-            btn.Size = new Size(w, h);
-            btn.BackColor = bg;
-            btn.ForeColor = Color.White;
-            btn.FlatStyle = FlatStyle.Flat;
-            btn.FlatAppearance.BorderSize = 0;
-            btn.Cursor = Cursors.Hand;
-            btn.Font = new Font("Segoe UI", 9.5f, FontStyle.Bold);
-            return btn;
+            if (saveData == null || string.IsNullOrEmpty(activeZipPath)) return;
+
+            try
+            {
+                // Ensure backup exists
+                string bakPath = activeZipPath + ".bak";
+                if (!File.Exists(bakPath) && File.Exists(activeZipPath))
+                {
+                    File.Copy(activeZipPath, bakPath, true);
+                }
+
+                string newJson = jsonSer.Serialize(saveData);
+
+                // Write to temp zip then atomic replace
+                string tempZip = activeZipPath + ".tmp";
+                if (File.Exists(tempZip)) File.Delete(tempZip);
+
+                using (var zip = ZipFile.Open(tempZip, ZipArchiveMode.Create))
+                {
+                    var entry = zip.CreateEntry("data.json", CompressionLevel.Optimal);
+                    using (var writer = new StreamWriter(entry.Open()))
+                    {
+                        writer.Write(newJson);
+                    }
+                }
+
+                if (File.Exists(activeZipPath)) File.Delete(activeZipPath);
+                File.Move(tempZip, activeZipPath);
+
+                lblStatus.Text = string.Format("{0} (Saved at {1:HH:mm:ss})", statusMsg, DateTime.Now);
+                lblStatus.ForeColor = Color.FromArgb(52, 211, 153);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Error saving to game: " + ex.Message, "Save Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                lblStatus.Text = "Save failed: " + ex.Message;
+                lblStatus.ForeColor = Color.FromArgb(239, 68, 68);
+            }
         }
     }
 }

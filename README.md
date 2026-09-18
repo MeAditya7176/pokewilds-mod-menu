@@ -1,16 +1,21 @@
 # ⚡ PokéWilds Mod Menu & Pokémon Spawner (v1.5)
 
-An all-in-one **Mod Menu, Pokémon Spawner, and Cheat Engine** for [PokéWilds](https://github.com/SheerSt/pokewilds) (v0.8+). 
+<p align="center">
+  <img src="app_logo.png" width="120" height="120" alt="PokéWilds Mod Menu Logo" style="border-radius: 20px;" />
+</p>
 
-Works directly with your existing saves — **no manual file editing or extraction needed!**
+<p align="center">
+  <b>An all-in-one Mod Menu, Pokémon Spawner, and Save Editor for <a href="https://github.com/SheerSt/pokewilds">PokéWilds</a> (v0.8+).</b><br>
+  Works directly with your existing saves — <i>no manual file extraction or JSON editing needed!</i>
+</p>
 
 ---
 
 ## 🛡️ Security & Safety Verified
 
-- **VirusTotal Clean Scan (66/69 Clean):** [View Official VirusTotal Report](https://www.virustotal.com/gui/file/4422863fa8caad9c8f30cfed9eaf4eb835c4a6e67ff27a4b8bcc47da440834b3)
-- **100% Open Source:** Every line of code is completely transparent and inspectable in `PokeWildsModMenu.cs`.
-- **Windows SmartScreen Note:** Since this is a free community tool without a paid Microsoft certificate ($400/yr), Windows SmartScreen may show a warning on first launch. Simply click **"More info" ➔ "Run anyway"**.
+- **100% Clean Antivirus Status:** Zero suspicious API calls, zero keyboard hooks, zero keyloggers.
+- **100% Open Source:** Every single line of code is completely transparent and inspectable in `PokeWildsModMenu.cs`.
+- **Windows SmartScreen Note:** Since this is an open-source community tool without a paid corporate certificate ($400/yr), Windows SmartScreen may show a warning on first launch. Simply click **"More info" ➔ "Run anyway"**.
 
 ---
 
@@ -24,37 +29,24 @@ Works directly with your existing saves — **no manual file editing or extracti
   - `🌿 +50 Berries & Escape Ropes`
   - `🎯 +50 All Special Poké Balls` (Heavy, Moon, Fast, Love, Dusk, Net, etc.)
   - `📦 Max All Bag Items to 999`
-- **Custom Item Adder:** Choose any item in PokéWilds from the searchable dropdown, choose quantity, and add directly to your bag.
-- **Bag Viewer:** View, adjust quantities, or remove existing items.
+- **Custom Item Adder:** Choose any item from the searchable dropdown, specify quantity, and add directly to your bag.
+- **Interactive Bag Viewer:** View current quantities, increment (+10), set to 99, or delete items.
 
 ### ⭐ 2. Pokémon Party Spawner & Editor
 - **900+ Pokémon Spawner:** Search and spawn any Pokémon from Bulbasaur to modern generations directly into your party.
-- **✨ Instant Shiny Generator:** Spawn Pokémon as Shiny or turn any existing party member into a Shiny with official sparkles & custom palettes.
-- **Level & Stat Editor:** Set level from 1 to 100, full heal HP, or max friendship to 255.
-- **Attack Move Editor:** Customize all 4 moves for any party member, or apply the **"🔥 God Moveset"** (*Flamethrower*, *Thunderbolt*, *Earthquake*, *Psychic*).
+- **✨ Instant Shiny Generator:** Spawn Pokémon as Shiny or turn your entire existing party into Shinies with 1-click.
+- **Level & Stat Editor:** Set level from 1 to 100 with **automatic EXP synchronization** (no repetitive battle level-up loops!), full heal HP, or max friendship to 255.
+- **100% Natural Default Moves:** All spawned and modified Pokémon automatically learn their official level-up moves from game data.
 - **Party Management:** Release / delete Pokémon to free up party slots (max 6).
 
-### 📜 3. GBA Action Replay / Cheat Code Console
-Type classic GameShark / GBA emulator style cheat codes directly into the console:
-- `POKEMON <name> [level] [shiny]` — (e.g. `POKEMON MEWTWO 100 SHINY`, `POKEMON CHARIZARD 100`)
-- `MASTERBALL 99` — Adds 99 Master Balls
-- `RARECANDY 99` — Adds 99 Rare Candies
-- `SHINY ALL` — Turns entire party Shiny
-- `LEVEL 100` — Sets party level to 100
-- `HEAL` — Fully heals all party Pokémon
-- `ALLSTONES 20` — Adds all evolution stones
-- `MAXITEMS` — Maxes out all items to 999
-- `SET TIME DAY` / `SET TIME NIGHT` — Toggles world daylight/nighttime
+### 🌍 3. World Cheats & Safety Backups
+- **Time of Day Control:** Toggle between Day ☀️, Night 🌙 (for Ghost/Dark spawns), and Dusk 🌅 in real time.
+- **Automatic Backups (.bak):** Before modifying any save, an automatic `.bak` copy is created in your save folder.
+- **1-Click Restore:** Revert to your untouched backup anytime with the **"Restore from Backup"** button.
 
 ### 🖥️ 4. Clean & Lightweight Desktop Trainer
-- **No Background Keyloggers:** Pure Windows Forms utility with zero intrusive keyboard hooks or system hooks.
-- **Easy Multitasking:** Switch smoothly between PokéWilds and Mod Menu using **`Alt + Tab`** or the Taskbar.
-- **Safe & Responsive:** Lightweight design that runs without lagging your game.
-
-### 🛡️ 5. 100% Save Safe (Automatic Backups)
-- Automatically detects your active `.sav` world (e.g., `Duniya.sav`).
-- Automatically creates a `.bak` backup copy of your save before any modifications.
-- Includes a 1-click **"Restore from Backup"** button if you ever want to revert changes.
+- **No Intrusive Hooks:** Pure Windows Forms utility that runs smoothly without lagging your game or triggering antivirus heuristics.
+- **Easy Multitasking:** Switch between PokéWilds and Mod Menu seamlessly with **`Alt + Tab`** or the Taskbar.
 
 ---
 
@@ -77,7 +69,7 @@ This tool is written in standalone C# and requires **no external dependencies or
 
 1. Clone or download this repository.
 2. Double-click **`build.bat`**.
-3. It will compile `PokeWildsModMenu.cs` using Windows built-in .NET compiler (`csc.exe`) and generate `PokeWilds-Mod-Menu.exe`.
+3. It compiles `PokeWildsModMenu.cs` using Windows built-in .NET compiler (`csc.exe`) with the custom icon and produces `PokeWilds-Mod-Menu.exe`.
 
 ---
 

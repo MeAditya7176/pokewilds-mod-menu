@@ -15,7 +15,11 @@ if not exist "%CSC%" (
 )
 
 echo Compiling PokeWildsModMenu.cs...
-"%CSC%" /target:winexe /r:System.dll,System.Drawing.dll,System.Windows.Forms.dll,System.IO.Compression.dll,System.IO.Compression.FileSystem.dll,System.Web.Extensions.dll /out:PokeWilds-Mod-Menu.exe PokeWildsModMenu.cs
+if exist app_logo.ico (
+    "%CSC%" /target:winexe /optimize+ /win32icon:app_logo.ico /r:System.dll,System.Drawing.dll,System.Windows.Forms.dll,System.IO.Compression.dll,System.IO.Compression.FileSystem.dll,System.Web.Extensions.dll /out:PokeWilds-Mod-Menu.exe PokeWildsModMenu.cs
+) else (
+    "%CSC%" /target:winexe /optimize+ /r:System.dll,System.Drawing.dll,System.Windows.Forms.dll,System.IO.Compression.dll,System.IO.Compression.FileSystem.dll,System.Web.Extensions.dll /out:PokeWilds-Mod-Menu.exe PokeWildsModMenu.cs
+)
 
 if %ERRORLEVEL% EQU 0 (
     echo.
