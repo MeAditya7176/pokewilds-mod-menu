@@ -4,20 +4,19 @@ using System.Drawing;
 using System.IO;
 using System.IO.Compression;
 using System.Reflection;
-using System.Runtime.InteropServices;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 
-[assembly: AssemblyTitle("PokéWilds Mod Menu & Spawner")]
-[assembly: AssemblyDescription("In-Game Mod Menu, Pokémon Spawner and Cheat Engine for PokéWilds")]
+[assembly: AssemblyTitle("PokeWilds Mod Menu and Spawner")]
+[assembly: AssemblyDescription("Mod Menu, Pokemon Spawner and Save Editor for PokeWilds")]
 [assembly: AssemblyConfiguration("")]
-[assembly: AssemblyCompany("PokéWilds Community")]
-[assembly: AssemblyProduct("PokéWilds Mod Menu")]
-[assembly: AssemblyCopyright("Copyright © 2026 PokéWilds Community")]
+[assembly: AssemblyCompany("PokeWilds Community")]
+[assembly: AssemblyProduct("PokeWilds Mod Menu")]
+[assembly: AssemblyCopyright("Copyright (C) 2026 PokeWilds Community")]
 [assembly: AssemblyTrademark("")]
 [assembly: AssemblyCulture("")]
-[assembly: ComVisible(false)]
-[assembly: Guid("e2b5c7a1-8f34-4d92-b106-7e5c9a124d3f")]
+[assembly: System.Runtime.InteropServices.ComVisible(false)]
+[assembly: System.Runtime.InteropServices.Guid("e2b5c7a1-8f34-4d92-b106-7e5c9a124d3f")]
 [assembly: AssemblyVersion("1.5.0.0")]
 [assembly: AssemblyFileVersion("1.5.0.0")]
 
@@ -36,39 +35,25 @@ namespace PokeWildsModMenu
             }
             catch (Exception ex)
             {
-                File.WriteAllText(@"C:\Users\Admin\.gemini\antigravity-ide\scratch\modmenu_err.log", ex.ToString());
-                MessageBox.Show(ex.ToString(), "PokeWilds Mod Menu Error");
+                File.WriteAllText(@"modmenu_error.log", ex.ToString());
+                MessageBox.Show(ex.Message, "PokéWilds Mod Menu Error");
             }
         }
     }
 
     public class ModMenuForm : Form
     {
-        [DllImport("user32.dll")]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, int fsModifiers, int vk);
-        [DllImport("user32.dll")]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-
-        private const int MOD_NONE = 0x0000;
-        private const int MOD_CONTROL = 0x0002;
-        private const int VK_F8 = 0x77;
-        private const int VK_I = 0x49;
-        private const int HOTKEY_ID_F8 = 9001;
-        private const int HOTKEY_ID_CTRL_I = 9002;
-        private const int WM_HOTKEY = 0x0312;
-
         private string gameDir = @"F:\pokewilds-v0.8.11-windows-64";
         private string activeSavFolder = "";
         private string activeZipPath = "";
         private Dictionary<string, object> saveData = null;
         private JavaScriptSerializer jsonSer = new JavaScriptSerializer();
 
-        // UI Controls
+        // Top Controls
         private ComboBox cmbSaves;
         private Label lblPlayerInfo;
         private Label lblStatus;
         private TabControl tabControl;
-        private NotifyIcon trayIcon;
 
         // Custom Top Nav Buttons
         private Button btnNavItems;
@@ -125,15 +110,14 @@ namespace PokeWildsModMenu
         public ModMenuForm()
         {
             this.Text = "PokéWilds Mod Menu & Spawner v1.5";
-            this.Size = new Size(910, 710);
-            this.MinimumSize = new Size(910, 710);
+            this.Size = new Size(910, 715);
+            this.MinimumSize = new Size(910, 715);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(24, 26, 32);
             this.ForeColor = Color.FromArgb(240, 240, 245);
             this.Font = new Font("Segoe UI", 9.5f, FontStyle.Regular);
-            this.TopMost = true;
 
-            // Check executable directory
+            // Auto-detect game directory
             string appDir = AppDomain.CurrentDomain.BaseDirectory.TrimEnd('\\', '/');
             if (Directory.Exists(Path.Combine(appDir, "app")) || File.Exists(Path.Combine(appDir, "pokewilds.exe")))
             {
@@ -142,8 +126,6 @@ namespace PokeWildsModMenu
 
             LoadPokemonNames();
             InitUI();
-            InitTrayIcon();
-            RegisterHotkeys();
             ScanSaves();
         }
 
@@ -169,73 +151,6 @@ namespace PokeWildsModMenu
             }
         }
 
-        private void RegisterHotkeys()
-        {
-            RegisterHotKey(this.Handle, HOTKEY_ID_F8, MOD_NONE, VK_F8);
-            RegisterHotKey(this.Handle, HOTKEY_ID_CTRL_I, MOD_CONTROL, VK_I);
-        }
-
-        protected override void OnFormClosing(FormClosingEventArgs e)
-        {
-            if (e.CloseReason == CloseReason.UserClosing)
-            {
-                e.Cancel = true;
-                this.Hide();
-                trayIcon.ShowBalloonTip(2000, "PokéWilds Mod Menu", "Menu minimized! Press F8 or Ctrl+I anytime to reopen.", ToolTipIcon.Info);
-                return;
-            }
-            UnregisterHotKey(this.Handle, HOTKEY_ID_F8);
-            UnregisterHotKey(this.Handle, HOTKEY_ID_CTRL_I);
-            trayIcon.Dispose();
-            base.OnFormClosing(e);
-        }
-
-        protected override void WndProc(ref Message m)
-        {
-            if (m.Msg == WM_HOTKEY)
-            {
-                ToggleVisibility();
-                return;
-            }
-            base.WndProc(ref m);
-        }
-
-        private void ToggleVisibility()
-        {
-            if (this.Visible && this.WindowState != FormWindowState.Minimized)
-            {
-                this.Hide();
-            }
-            else
-            {
-                this.Show();
-                this.WindowState = FormWindowState.Normal;
-                this.BringToFront();
-                this.Activate();
-                ScanSaves();
-            }
-        }
-
-        private void InitTrayIcon()
-        {
-            trayIcon = new NotifyIcon();
-            trayIcon.Icon = SystemIcons.Application;
-            trayIcon.Text = "PokéWilds Mod Menu (Press F8 or Ctrl+I)";
-            trayIcon.Visible = true;
-            trayIcon.DoubleClick += delegate { ToggleVisibility(); };
-
-            ContextMenu menu = new ContextMenu();
-            menu.MenuItems.Add("Show / Hide Mod Menu", delegate { ToggleVisibility(); });
-            menu.MenuItems.Add("-");
-            menu.MenuItems.Add("Exit Completely", delegate {
-                UnregisterHotKey(this.Handle, HOTKEY_ID_F8);
-                UnregisterHotKey(this.Handle, HOTKEY_ID_CTRL_I);
-                trayIcon.Visible = false;
-                Application.Exit();
-            });
-            trayIcon.ContextMenu = menu;
-        }
-
         private void SwitchTab(int index)
         {
             tabControl.SelectedIndex = index;
@@ -253,42 +168,34 @@ namespace PokeWildsModMenu
             // Top Header Panel
             Panel topPanel = new Panel();
             topPanel.Dock = DockStyle.Top;
-            topPanel.Height = 115;
+            topPanel.Height = 118;
             topPanel.BackColor = Color.FromArgb(32, 35, 44);
             this.Controls.Add(topPanel);
 
             Label lblTitle = new Label();
             lblTitle.Text = "⚡ PokéWilds Mod Menu & Spawner";
-            lblTitle.Font = new Font("Segoe UI", 13.5f, FontStyle.Bold);
+            lblTitle.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
             lblTitle.ForeColor = Color.FromArgb(129, 140, 248);
-            lblTitle.Location = new Point(16, 10);
+            lblTitle.Location = new Point(16, 12);
             lblTitle.AutoSize = true;
             topPanel.Controls.Add(lblTitle);
 
-            Label lblHotkey = new Label();
-            lblHotkey.Text = "[Hotkey: F8 or Ctrl+I]";
-            lblHotkey.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
-            lblHotkey.ForeColor = Color.FromArgb(52, 211, 153);
-            lblHotkey.Location = new Point(320, 14);
-            lblHotkey.AutoSize = true;
-            topPanel.Controls.Add(lblHotkey);
-
             Label lblSelectWorld = new Label();
             lblSelectWorld.Text = "Active World:";
-            lblSelectWorld.Location = new Point(480, 14);
+            lblSelectWorld.Location = new Point(510, 16);
             lblSelectWorld.AutoSize = true;
             topPanel.Controls.Add(lblSelectWorld);
 
             cmbSaves = new ComboBox();
             cmbSaves.DropDownStyle = ComboBoxStyle.DropDownList;
-            cmbSaves.Location = new Point(565, 11);
-            cmbSaves.Width = 160;
+            cmbSaves.Location = new Point(595, 13);
+            cmbSaves.Width = 165;
             cmbSaves.BackColor = Color.FromArgb(45, 49, 60);
             cmbSaves.ForeColor = Color.White;
             cmbSaves.SelectedIndexChanged += delegate { LoadSelectedSave(); };
             topPanel.Controls.Add(cmbSaves);
 
-            Button btnRefresh = CreateStyledButton("🔄 Refresh", 735, 9, 95, 28, Color.FromArgb(59, 130, 246));
+            Button btnRefresh = CreateStyledButton("🔄 Refresh", 770, 11, 95, 28, Color.FromArgb(59, 130, 246));
             btnRefresh.Click += delegate { ScanSaves(); };
             topPanel.Controls.Add(btnRefresh);
 
@@ -296,27 +203,27 @@ namespace PokeWildsModMenu
             lblPlayerInfo.Text = "Player: Loading... | No Save Loaded";
             lblPlayerInfo.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             lblPlayerInfo.ForeColor = Color.FromArgb(156, 163, 175);
-            lblPlayerInfo.Location = new Point(18, 38);
+            lblPlayerInfo.Location = new Point(18, 42);
             lblPlayerInfo.AutoSize = true;
             topPanel.Controls.Add(lblPlayerInfo);
 
-            // Row 3: Modern Navigation Buttons (Directly Clickable Tabs!)
-            btnNavItems = CreateStyledButton("🎒 Items & Bag", 16, 68, 170, 36, Color.FromArgb(99, 102, 241));
+            // Row 3: Navigation Tab Buttons
+            btnNavItems = CreateStyledButton("🎒 Items & Bag", 16, 70, 175, 36, Color.FromArgb(99, 102, 241));
             btnNavItems.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavItems.Click += delegate { SwitchTab(0); };
             topPanel.Controls.Add(btnNavItems);
 
-            btnNavPokemon = CreateStyledButton("⭐ Pokémon & Spawner", 195, 68, 230, 36, Color.FromArgb(45, 49, 60));
+            btnNavPokemon = CreateStyledButton("⭐ Pokémon Spawner", 200, 70, 225, 36, Color.FromArgb(45, 49, 60));
             btnNavPokemon.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavPokemon.Click += delegate { SwitchTab(1); };
             topPanel.Controls.Add(btnNavPokemon);
 
-            btnNavCheats = CreateStyledButton("📜 GBA Cheat Codes", 435, 68, 190, 36, Color.FromArgb(45, 49, 60));
+            btnNavCheats = CreateStyledButton("📜 GBA Cheat Codes", 435, 70, 195, 36, Color.FromArgb(45, 49, 60));
             btnNavCheats.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavCheats.Click += delegate { SwitchTab(2); };
             topPanel.Controls.Add(btnNavCheats);
 
-            btnNavWorld = CreateStyledButton("🌍 World & Time", 635, 68, 160, 36, Color.FromArgb(45, 49, 60));
+            btnNavWorld = CreateStyledButton("🌍 World & Time", 640, 70, 160, 36, Color.FromArgb(45, 49, 60));
             btnNavWorld.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnNavWorld.Click += delegate { SwitchTab(3); };
             topPanel.Controls.Add(btnNavWorld);
@@ -329,7 +236,7 @@ namespace PokeWildsModMenu
             this.Controls.Add(bottomPanel);
 
             lblStatus = new Label();
-            lblStatus.Text = "Ready. (Press F8 or Ctrl+I to toggle menu anytime)";
+            lblStatus.Text = "Ready to modify PokéWilds saves!";
             lblStatus.Font = new Font("Segoe UI", 9f, FontStyle.Regular);
             lblStatus.ForeColor = Color.FromArgb(156, 163, 175);
             lblStatus.Location = new Point(16, 10);
@@ -337,19 +244,19 @@ namespace PokeWildsModMenu
             bottomPanel.Controls.Add(lblStatus);
 
             Label lblReloadTip = new Label();
-            lblReloadTip.Text = "💡 Tip: Save in-game, then exit to title & continue to see new Pokémon & items!";
+            lblReloadTip.Text = "💡 Tip: After saving in Mod Menu, press Save in-game -> Title -> Continue to load changes!";
             lblReloadTip.Font = new Font("Segoe UI", 8.5f, FontStyle.Italic);
             lblReloadTip.ForeColor = Color.FromArgb(251, 191, 36);
             lblReloadTip.Location = new Point(16, 32);
             lblReloadTip.AutoSize = true;
             bottomPanel.Controls.Add(lblReloadTip);
 
-            Button btnSaveAll = CreateStyledButton("💾 Apply & Save to Game", 620, 12, 250, 40, Color.FromArgb(16, 185, 129));
+            Button btnSaveAll = CreateStyledButton("💾 Apply & Save to Game", 620, 12, 255, 40, Color.FromArgb(16, 185, 129));
             btnSaveAll.Font = new Font("Segoe UI", 10.5f, FontStyle.Bold);
             btnSaveAll.Click += delegate { ApplyAndSave("All Changes Saved Successfully!"); };
             bottomPanel.Controls.Add(btnSaveAll);
 
-            // Tab Control (Managed by the Top Nav Buttons)
+            // Tab Control
             tabControl = new TabControl();
             tabControl.Dock = DockStyle.Fill;
             tabControl.Appearance = TabAppearance.FlatButtons;

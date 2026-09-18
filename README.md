@@ -46,10 +46,10 @@ Type classic GameShark / GBA emulator style cheat codes directly into the consol
 - `MAXITEMS` — Maxes out all items to 999
 - `SET TIME DAY` / `SET TIME NIGHT` — Toggles world daylight/nighttime
 
-### ⌨️ 4. In-Game Hotkeys & Overlay
-- **`F8`** or **`Ctrl + I`**: Press anytime to instantly open or hide the Mod Menu right over PokéWilds.
-- **System Tray Icon:** Minimizes to system tray when closed so you can reopen with hotkeys anytime.
-- **Always on Top:** Floats conveniently over your game window.
+### 🖥️ 4. Clean & Lightweight Desktop Trainer
+- **No Background Keyloggers:** Pure Windows Forms utility with zero intrusive keyboard hooks or system hooks.
+- **Easy Multitasking:** Switch smoothly between PokéWilds and Mod Menu using **`Alt + Tab`** or the Taskbar.
+- **Safe & Responsive:** Lightweight design that runs without lagging your game.
 
 ### 🛡️ 5. 100% Save Safe (Automatic Backups)
 - Automatically detects your active `.sav` world (e.g., `Duniya.sav`).
@@ -60,10 +60,10 @@ Type classic GameShark / GBA emulator style cheat codes directly into the consol
 
 ## 🚀 How to Install & Run
 
-1. Download the latest **`PokeWilds-Mod-Menu-v1.5-Windows.zip`** from [Releases](https://github.com/).
+1. Download the latest **`PokeWilds-Mod-Menu-v1.5-Windows.zip`** from [Releases](https://github.com/MeAditya7176/pokewilds-mod-menu/releases).
 2. Extract the files into your main **PokéWilds game folder** (where `pokewilds.exe` is located).
 3. Double-click **`PokeWilds-Mod-Menu.exe`** to launch.
-4. Press **`F8`** or **`Ctrl + I`** anytime while playing to open the Mod Menu!
+4. Switch to the menu with **`Alt + Tab`** anytime while playing to add items or spawn Pokémon!
 
 > **💡 Sync Tip:** After applying cheats in the Mod Menu:
 > - In PokéWilds, simply press `Enter` -> `Save` -> `Exit to Title` -> `Continue`.
