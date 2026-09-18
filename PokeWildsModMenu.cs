@@ -780,9 +780,9 @@ namespace PokeWildsModMenu
             btnPresetCharizard.Click += delegate { AddNewPokemonToParty("charizard", 100, true, "male", "charizard"); };
             grpSpawn.Controls.Add(btnPresetCharizard);
 
-            Button btnPresetRayquaza = CreateStyledButton("🐉 Shiny Rayquaza (Lvl 100)", 12, 375, 275, 26, Color.FromArgb(16, 185, 129));
-            btnPresetRayquaza.Click += delegate { AddNewPokemonToParty("rayquaza", 100, true, "genderless", "rayquaza"); };
-            grpSpawn.Controls.Add(btnPresetRayquaza);
+            Button btnPresetLugia = CreateStyledButton("🌊 Shiny Lugia (Lvl 100)", 12, 375, 275, 26, Color.FromArgb(6, 182, 212));
+            btnPresetLugia.Click += delegate { AddNewPokemonToParty("lugia", 100, true, "genderless", "lugia"); };
+            grpSpawn.Controls.Add(btnPresetLugia);
 
             Button btnPresetGengar = CreateStyledButton("👻 Shiny Gengar (Lvl 100)", 12, 405, 275, 26, Color.FromArgb(139, 92, 246));
             btnPresetGengar.Click += delegate { AddNewPokemonToParty("gengar", 100, true, "male", "gengar"); };
@@ -1109,7 +1109,13 @@ namespace PokeWildsModMenu
             newPoke["test"] = false;
             newPoke["generation"] = "CRYSTAL";
             newPoke["isShiny"] = isShiny;
-            newPoke["attacks"] = naturalMoves.ToArray();
+            // Fix: PokeWilds strictly requires an array of exactly 4 attacks (empty slots must be null)
+            object[] fourAttacks = new object[4];
+            for (int i = 0; i < 4; i++)
+            {
+                fourAttacks[i] = (i < naturalMoves.Count && !string.IsNullOrEmpty(naturalMoves[i])) ? (object)naturalMoves[i] : null;
+            }
+            newPoke["attacks"] = fourAttacks;
             newPoke["index"] = list.Count;
             newPoke["previousOwnerName"] = player.ContainsKey("name") ? player["name"].ToString() : "Player";
             newPoke["position"] = 0;
